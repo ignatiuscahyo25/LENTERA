@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-primary: #00193c;
+  --color-primary-container: #002d62;
+  --color-on-primary-container: #7796d1;
+  
+  --color-secondary: #ba0627;
+  --color-secondary-container: #de2c3c;
+  
+  --color-tertiary: #541d02;
+  --color-tertiary-fixed-dim: #ffb597;
+  
+  --color-background: #faf9fe;
+  --color-on-surface: #1a1b1f;
+  --color-on-surface-variant: #43474f;
+  
+  --color-outline: #747781;
+  --color-outline-variant: #c4c6d1;
+  
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f3f8;
+  --color-surface-container: #eeedf2;
+  --color-surface-container-high: #e8e7ed;
+  --color-surface-container-highest: #e3e2e7;
+  --color-surface-bright: #faf9fe;
+}
+
+/* Custom Tactical Background Utilities */
+.tactical-grid {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(0, 168, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 168, 255, 0.05) 1px, transparent 1px);
+}
+
+.tactical-grid-glow {
+  box-shadow: 0 0 40px rgba(0, 45, 98, 0.2) inset;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #faf9fe;
+}
+::-webkit-scrollbar-thumb {
+  background: #c4c6d1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a0a2b0;
+}
+

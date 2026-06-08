@@ -1,0 +1,6 @@
+{
+  "name": "LENTERA Dashboard",
+  "description": "Sistem monitoring laporan darurat real-time, koordinasi tim SAR, dan visualisasi status korban.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
