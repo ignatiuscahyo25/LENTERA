@@ -9,13 +9,11 @@ import {
   CheckCircle2, 
   Download, 
   Map, 
-  Plus, 
   Menu, 
   X, 
   Clock, 
   ChevronRight, 
-  Signal,
-  BellRing
+  Signal
 } from 'lucide-react';
 import { Report, ReportStatus } from '../types';
 import RealMap from './RealMap';
@@ -33,25 +31,17 @@ interface DashboardScreenProps {
   onSelectReport: (id: number) => void;
   onNavigateToSettings: () => void;
   onNavigateToLogout: () => void;
-  onAddNewReport: (node: string, lat: number, lng: number, notes?: string) => void;
 }
 
 export default function DashboardScreen({
   reports,
   user,
   onSelectReport,
-  onNavigateToSettings,
-  onAddNewReport
+  onNavigateToSettings
 }: DashboardScreenProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'SEMUA' | ReportStatus>('SEMUA');
-  const [showAddModal, setShowAddModal] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
-
-  const [newNodeId, setNewNodeId] = useState('NODE-05');
-  const [newLat, setNewLat] = useState('-6.3650');
-  const [newLng, setNewLng] = useState('106.8250');
-  const [newNotes, setNewNotes] = useState('');
 
   const displayName = user?.name || 'Admin User';
   const displayRole = user?.role || 'SAR Mission Control';
@@ -137,24 +127,14 @@ export default function DashboardScreen({
   });
 
   const maxTransmission = Math.max(...transmissionData.map(item => item.total), 1);
-
-  const handleCreateReport = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const latNum = parseFloat(newLat) || -6.3650;
-    const lngNum = parseFloat(newLng) || 106.8250;
-
-    onAddNewReport(newNodeId, latNum, lngNum, newNotes);
-
-    setShowAddModal(false);
-    setNewNotes('');
-    setNewNodeId(`NODE-${String(Math.floor(Math.random() * 8) + 5).padStart(2, '0')}`);
-  };
+  const peakTransmission = Math.max(...transmissionData.map(item => item.total), 0);
 
   const handleDownloadMock = () => {
     const csvContent = "data:text/csv;charset=utf-8," 
-      + ["ID,Waktu,Status,Node,Latitude,Longitude\n"]
-      + reports.map(r => `${r.id},${r.time},${r.status},${r.node},${r.latitude},${r.longitude}`).join("\n");
+      + ["ID_Laporan,Waktu,Status,Node,Latitude,Longitude,Total_Sinyal\n"]
+      + reports
+        .map(r => `${r.messageId || r.id},${r.time},${r.status},${r.node},${r.latitude},${r.longitude},${r.duplicateCount || 1}`)
+        .join("\n");
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -514,7 +494,7 @@ export default function DashboardScreen({
                       {filteredReports.map((report) => (
                         <tr key={report.id} className="hover:bg-[#f4f3f8] transition-colors group">
                           <td className="px-4 py-3 font-mono font-bold text-xs text-[#00193c]">
-                            {report.id}
+                            {report.messageId || report.id}
                           </td>
 
                           <td className="px-4 py-3">
@@ -567,7 +547,7 @@ export default function DashboardScreen({
                         <div className="flex flex-col">
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono font-black text-sm text-[#00193c]">
-                              ID: {report.id}
+                              ID: {report.messageId || report.id}
                             </span>
                             <span className="text-[10px] text-[#43474f] font-mono">
                               ({report.time} WIB)
@@ -652,7 +632,7 @@ export default function DashboardScreen({
                   Intensitas Transmisi Sinyal (24 Jam)
                 </h3>
                 <p className="text-[11px] text-[#43474f] mt-0.5">
-                  Distribusi jumlah laporan SOS yang masuk berdasarkan interval waktu 4 jam.
+                  Distribusi jumlah laporan SOS berdasarkan interval 4 jam. Bar merah menunjukkan puncak intensitas laporan.
                 </p>
               </div>
 
@@ -670,8 +650,7 @@ export default function DashboardScreen({
                       ? 4
                       : Math.max((item.total / maxTransmission) * 90, 12);
 
-                    const currentHour = new Date().getHours();
-                    const isCurrentBucket = currentHour >= item.start && currentHour <= item.end;
+                    const isPeakBucket = item.total > 0 && item.total === peakTransmission;
 
                     return (
                       <div
@@ -684,7 +663,7 @@ export default function DashboardScreen({
 
                         <div
                           className={`w-full rounded-t-sm transition-all duration-500 ${
-                            isCurrentBucket
+                            isPeakBucket
                               ? 'bg-[#ba0627] shadow-[0_0_12px_rgba(186,6,39,0.3)]'
                               : 'bg-[#002d62]/80'
                           }`}
@@ -698,13 +677,12 @@ export default function DashboardScreen({
 
                 <div className="flex justify-between border-t border-[#c4c6d1] pt-2 mt-2 px-1 font-mono text-[9px] text-[#43474f] font-bold">
                   {transmissionData.map((item) => {
-                    const currentHour = new Date().getHours();
-                    const isCurrentBucket = currentHour >= item.start && currentHour <= item.end;
+                    const isPeakBucket = item.total > 0 && item.total === peakTransmission;
 
                     return (
                       <span
                         key={item.label}
-                        className={isCurrentBucket ? 'text-[#ba0627]' : ''}
+                        className={isPeakBucket ? 'text-[#ba0627]' : ''}
                         title={item.range}
                       >
                         {item.label}
@@ -790,133 +768,6 @@ export default function DashboardScreen({
           </button>
         </div>
       </footer>
-
-      <button 
-        onClick={() => setShowAddModal(true)}
-        className="fixed bottom-20 md:bottom-6 right-4 md:right-6 bg-[#ba0627] text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-35 cursor-pointer border border-[#c4c6d1]/20"
-        title="Input SOS Manual"
-      >
-        <Plus size={28} />
-      </button>
-
-      <AnimatePresence>
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowAddModal(false)}
-              className="absolute inset-0 bg-[#1a1b1f]"
-            />
-
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="bg-[#faf9fe] border border-[#c4c6d1] rounded-lg shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto relative z-10 text-[#1a1b1f]"
-            >
-              <div className="bg-[#00193c] px-5 py-4 text-white flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BellRing size={18} className="text-[#ba0627] animate-bounce" />
-                  <span className="font-extrabold text-sm uppercase tracking-wider">
-                    Trigger Sinyal SOS Darurat
-                  </span>
-                </div>
-
-                <button 
-                  onClick={() => setShowAddModal(false)}
-                  className="p-1 rounded text-white/70 hover:text-white"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateReport} className="p-5 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider font-extrabold text-[#43474f] mb-1">
-                      Node Transceiver
-                    </label>
-                    <input 
-                      type="text" 
-                      value={newNodeId}
-                      onChange={(e) => setNewNodeId(e.target.value)}
-                      placeholder="e.g. NODE-05" 
-                      className="w-full text-xs font-semibold px-2.5 py-2 bg-white border border-[#c4c6d1] rounded focus:ring-1 focus:ring-[#002d62] focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider font-extrabold text-[#43474f] mb-1">
-                      Objek Laporan
-                    </label>
-                    <input 
-                      type="text" 
-                      value={newNotes} 
-                      onChange={(e) => setNewNotes(e.target.value)}
-                      placeholder="e.g. Survivor Shelter Pos 2" 
-                      className="w-full text-xs font-semibold px-2.5 py-2 bg-white border border-[#c4c6d1] rounded focus:ring-1 focus:ring-[#002d62] focus:outline-none"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider font-extrabold text-[#43474f] mb-1">
-                      Latitude
-                    </label>
-                    <input 
-                      type="text" 
-                      value={newLat} 
-                      onChange={(e) => setNewLat(e.target.value)}
-                      placeholder="e.g. -6.3650" 
-                      className="w-full text-xs font-mono font-bold px-2.5 py-2 bg-white border border-[#c4c6d1] rounded focus:ring-1 focus:ring-[#002d62] focus:outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider font-extrabold text-[#43474f] mb-1">
-                      Longitude
-                    </label>
-                    <input 
-                      type="text" 
-                      value={newLng} 
-                      onChange={(e) => setNewLng(e.target.value)}
-                      placeholder="e.g. 106.8250" 
-                      className="w-full text-xs font-mono font-bold px-2.5 py-2 bg-white border border-[#c4c6d1] rounded focus:ring-1 focus:ring-[#002d62] focus:outline-none"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-[#43474f]/80 leading-relaxed pl-1 italic">
-                  Note: Tombol ini menyimulasikan input laporan SOS. Laporan baru akan berstatus <strong className="text-[#ba0627]">BARU</strong>.
-                </p>
-
-                <div className="flex gap-2 justify-end pt-3 border-t border-[#c4c6d1]/50">
-                  <button 
-                    type="button"
-                    onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 border border-[#c4c6d1] rounded text-xs font-semibold hover:bg-[#eeedf2]"
-                  >
-                    Batal
-                  </button>
-
-                  <button 
-                    type="submit"
-                    className="px-4 py-2 bg-[#ba0627] text-white rounded text-xs font-bold hover:opacity-90 transition-all cursor-pointer"
-                  >
-                    Kirim SOS Sinyal
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

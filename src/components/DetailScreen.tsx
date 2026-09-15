@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import DetailMap from './DetailMap';
 import { 
   ArrowLeft, 
@@ -10,9 +10,10 @@ import {
   Flame, 
   RefreshCw, 
   CheckCircle,
-  FileText,
   Check,
-  Navigation
+  Navigation,
+  Radio,
+  Smartphone
 } from 'lucide-react';
 import { Report, ReportStatus } from '../types';
 
@@ -33,12 +34,24 @@ export default function DetailScreen({
 
   const report = reports.find(r => r.id === reportId);
 
+  useEffect(() => {
+    if (!report) {
+      const timeout = setTimeout(() => {
+        onBackToDashboard();
+      }, 300);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [report, onBackToDashboard]);
+
   if (!report) {
     return (
       <div className="min-h-screen bg-[#faf9fe] text-[#1a1b1f] flex flex-col items-center justify-center p-6">
-        <p className="text-sm font-bold text-[#ba0627]">Terjadi kesalahan</p>
-        <p className="text-xs text-[#43474f] mt-1">
-          Laporan dengan ID {reportId} tidak ditemukan.
+        <p className="text-sm font-bold text-[#ba0627]">
+          Mengembalikan ke Dashboard...
+        </p>
+        <p className="text-xs text-[#43474f] mt-1 text-center">
+          Laporan dengan ID {reportId} tidak ditemukan atau data belum selesai dimuat.
         </p>
         <button 
           type="button"
@@ -50,6 +63,9 @@ export default function DetailScreen({
       </div>
     );
   }
+
+  const displayReportId = report.messageId || report.id;
+  const totalSignal = report.duplicateCount || 1;
 
   const handleCopyCoords = async () => {
     const coordString = `${report.latitude}, ${report.longitude}`;
@@ -124,6 +140,47 @@ export default function DetailScreen({
     });
   };
 
+  const formatLastSeen = () => {
+    if (!report.lastSeen) return 'Belum ada sinyal ulang';
+
+    return new Date(report.lastSeen).toLocaleString('id-ID', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  };
+
+  const getVictimMessage = () => {
+    if (report.status === 'BARU') {
+      return {
+        title: 'Laporan SOS Diterima',
+        message: 'Laporan SOS Anda telah diterima oleh sistem LENTERA. Mohon tetap tenang, hemat baterai perangkat, dan tunggu konfirmasi dari tim SAR.',
+        tone: 'bg-[#fff3f5] border-[#ba0627]/30 text-[#ba0627]'
+      };
+    }
+
+    if (report.status === 'PROSES') {
+      return {
+        title: 'Bantuan Sedang Diproses',
+        message: 'Tim SAR sedang memproses laporan Anda dan menuju koordinat terakhir yang diterima. Harap menunggu di tempat yang aman, jangan berpindah terlalu jauh, dan tetap pantau perangkat Anda.',
+        tone: 'bg-[#fff7ed] border-[#ffb597] text-[#541d02]'
+      };
+    }
+
+    return {
+      title: 'Laporan Telah Ditangani',
+      message: 'Laporan Anda telah ditandai selesai ditangani oleh operator SAR. Tetap ikuti arahan petugas di lokasi dan pastikan kondisi Anda aman.',
+      tone: 'bg-emerald-50 border-emerald-300 text-emerald-700'
+    };
+  };
+
+  const victimMessage = getVictimMessage();
+
   return (
     <div className="min-h-screen bg-[#faf9fe] text-[#1a1b1f] flex flex-col font-sans pb-16">
       
@@ -151,7 +208,7 @@ export default function DetailScreen({
           <div>
             <div className="flex items-center gap-3 flex-wrap">
               <h2 className="font-extrabold text-2xl text-[#00193c] tracking-tight">
-                ID Laporan: {report.id}
+                ID Laporan: {displayReportId}
               </h2>
 
               <span className={`px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
@@ -173,7 +230,7 @@ export default function DetailScreen({
           
           <div className="lg:col-span-5 space-y-4 flex flex-col justify-between">
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="bg-[#eeedf2] border border-[#c4c6d1] p-4 rounded flex flex-col justify-between shadow-sm">
                 <span className="text-[10px] uppercase font-extrabold text-[#43474f]">
                   Waktu Laporan
@@ -197,7 +254,38 @@ export default function DetailScreen({
                   {report.node}
                 </span>
               </div>
+
+              <div className="bg-[#eeedf2] border border-[#c4c6d1] p-4 rounded flex flex-col justify-between shadow-sm font-mono">
+                <span className="text-[10px] uppercase font-extrabold text-[#43474f] font-sans">
+                  Total Sinyal
+                </span>
+
+                <span className="text-xl md:text-2xl font-black text-[#00193c] mt-2 block">
+                  {totalSignal}x
+                </span>
+
+                <span className="text-[10px] text-[#43474f] font-semibold mt-1 font-sans">
+                  SOS diterima
+                </span>
+              </div>
             </div>
+
+            {totalSignal > 1 && (
+              <div className="bg-[#fff3f5] border border-[#ba0627]/30 rounded p-3 text-xs text-[#43474f]">
+                <div className="flex items-center gap-2 mb-1">
+                  <Radio size={14} className="text-[#ba0627]" />
+                  <span className="font-extrabold text-[#ba0627] uppercase tracking-wider text-[10px]">
+                    Sinyal Berulang Terdeteksi
+                  </span>
+                </div>
+                <p className="leading-relaxed">
+                  Korban/perangkat mengirim SOS sebanyak <strong>{totalSignal} kali</strong>. Status tidak diubah otomatis agar operator tidak bingung.
+                </p>
+                <p className="mt-1 text-[10px] font-semibold">
+                  Sinyal terakhir diterima: {formatLastSeen()}
+                </p>
+              </div>
+            )}
 
             <div className="bg-white border border-[#c4c6d1] rounded p-5 shadow-sm space-y-4">
               
@@ -274,19 +362,25 @@ export default function DetailScreen({
             </div>
 
             <div className="bg-white border border-[#c4c6d1] rounded p-5 shadow-sm">
-              <div className="flex items-center gap-2 border-b border-[#c4c6d1]/50 pb-2 mb-2">
-                <FileText size={16} className="text-[#00193c]" />
+              <div className="flex items-center gap-2 border-b border-[#c4c6d1]/50 pb-2 mb-3">
+                <Smartphone size={16} className="text-[#00193c]" />
                 <h3 className="font-bold text-xs uppercase tracking-wider text-[#1a1b1f]">
-                  Identitas Objek / Korban
+                  Pesan ke Perangkat Korban
                 </h3>
               </div>
 
-              <p className="font-bold text-xs text-[#002c5c] font-sans">
-                {report.victimName || "Sinyal Otomatis Aktif"}
-              </p>
+              <div className={`rounded border p-3 ${victimMessage.tone}`}>
+                <p className="font-extrabold text-xs uppercase tracking-wider">
+                  {victimMessage.title}
+                </p>
 
-              <p className="text-xs text-[#43474f] mt-1.5 leading-relaxed font-sans bg-[#f4f3f8] p-3 rounded border border-[#c4c6d1]/40">
-                {report.notes || "Tidak ada detail keterangan tambahan. Titik koordinat berasal dari laporan SOS yang diterima oleh gateway LENTERA."}
+                <p className="text-xs mt-2 leading-relaxed text-[#1a1b1f]">
+                  {victimMessage.message}
+                </p>
+              </div>
+
+              <p className="mt-3 text-[10px] text-[#43474f] leading-relaxed">
+                Pesan ini merepresentasikan notifikasi yang dapat dikirim ke perangkat korban melalui sistem LENTERA.
               </p>
             </div>
           </div>
@@ -303,7 +397,7 @@ export default function DetailScreen({
               </div>
 
               <div className="px-2 py-1 bg-[#eeedf2] rounded border border-[#c4c6d1] text-[10px] font-bold text-[#00193c]">
-                ID {report.id}
+                ID {displayReportId}
               </div>
             </div>
 

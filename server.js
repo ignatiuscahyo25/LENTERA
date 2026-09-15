@@ -1,12 +1,12 @@
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import Database from "better-sqlite3";
 
 const app = express();
 const port = process.env.PORT || 4000;
-
-import path from "path";
-import { fileURLToPath } from "url";
 
 app.use(cors());
 app.use(express.json());
@@ -15,6 +15,48 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const db = new Database("lentera.db");
+
+// =======================
+// HELPER
+// =======================
+const getCurrentTimestamp = () => {
+  const now = new Date();
+
+  const createdAt = now.toISOString();
+
+  const waktu = now.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  return { now, createdAt, waktu };
+};
+
+const normalizeStatusText = (status) => {
+  const lower = String(status).toLowerCase();
+
+  if (lower.includes("baru")) return "BARU";
+  if (lower.includes("proses")) return "PROSES";
+  if (lower.includes("selesai")) return "SELESAI";
+
+  return String(status).toUpperCase();
+};
+
+const getOperatorLogMessage = (status) => {
+  const normalizedStatus = normalizeStatusText(status);
+
+  if (normalizedStatus === "PROSES") {
+    return "Status laporan diubah menjadi PROSES. Tim SAR sedang memproses laporan dan menuju koordinat korban.";
+  }
+
+  if (normalizedStatus === "SELESAI") {
+    return "Status laporan diubah menjadi SELESAI. Penanganan laporan telah diselesaikan oleh operator SAR.";
+  }
+
+  return "Status laporan diubah menjadi BARU. Laporan kembali masuk ke antrean awal.";
+};
 
 // =======================
 // TABLE: REPORTS
@@ -28,74 +70,159 @@ db.prepare(`
     node_penerima TEXT NOT NULL,
     latitude REAL NOT NULL,
     longitude REAL NOT NULL,
-    created_at TEXT
+    victim_count INTEGER DEFAULT 1,
+    created_at TEXT,
+    last_seen TEXT,
+    duplicate_count INTEGER DEFAULT 1
   )
 `).run();
 
-// Tambahkan kolom created_at untuk database lama
+// =======================
+// TABLE: REPORT LOGS
+// =======================
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS report_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id TEXT NOT NULL,
+    waktu TEXT NOT NULL,
+    message TEXT NOT NULL,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`).run();
+
+// =======================
+// MIGRATION DATABASE LAMA
+// =======================
 try {
   db.prepare("ALTER TABLE reports ADD COLUMN created_at TEXT").run();
 } catch (error) {
   // Kolom sudah ada
 }
 
-// Isi created_at untuk data lama yang masih kosong
+try {
+  db.prepare("ALTER TABLE reports ADD COLUMN last_seen TEXT").run();
+} catch (error) {
+  // Kolom sudah ada
+}
+
+try {
+  db.prepare("ALTER TABLE reports ADD COLUMN duplicate_count INTEGER DEFAULT 1").run();
+} catch (error) {
+  // Kolom sudah ada
+}
+
+try {
+  db.prepare("ALTER TABLE reports ADD COLUMN victim_count INTEGER DEFAULT 1").run();
+} catch (error) {
+  // Kolom sudah ada
+}
+
+// Isi kolom kosong pada data lama, kalau masih ada data lama
 db.prepare(`
   UPDATE reports
   SET created_at = COALESCE(created_at, datetime('now'))
   WHERE created_at IS NULL
 `).run();
 
-// Isi dummy data awal kalau tabel reports masih kosong
-const count = db.prepare("SELECT COUNT(*) AS total FROM reports").get();
+db.prepare(`
+  UPDATE reports
+  SET 
+    last_seen = COALESCE(last_seen, created_at, datetime('now')),
+    duplicate_count = COALESCE(duplicate_count, 1),
+    victim_count = COALESCE(victim_count, 1)
+  WHERE last_seen IS NULL 
+     OR duplicate_count IS NULL
+     OR victim_count IS NULL
+`).run();
 
-if (count.total === 0) {
-  const insert = db.prepare(`
-    INSERT INTO reports 
-    (message_id, waktu, status, node_penerima, latitude, longitude, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
+// CATATAN:
+// Tidak ada dummy data.
+// Database laporan akan kosong sampai ada data asli dari ESP32 receiver.
 
-  const now = new Date();
-  const createdAt = now.toISOString();
-  const waktu = now.toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  });
-
-  insert.run("1234", waktu, "Baru", "NODE-02", -6.3634, 106.8285, createdAt);
-  insert.run("1235", waktu, "Proses", "NODE-01", -6.3641, 106.8291, createdAt);
-  insert.run("1230", waktu, "Selesai", "NODE-04", -6.3622, 106.8278, createdAt);
-}
+// =======================
+// REPORT ENDPOINTS
+// =======================
 
 // Ambil semua laporan
 app.get("/api/reports", (req, res) => {
-  const reports = db.prepare("SELECT * FROM reports ORDER BY id DESC").all();
-  res.json(reports);
+  try {
+    const reports = db
+      .prepare("SELECT * FROM reports ORDER BY id DESC")
+      .all();
+
+    res.json(reports);
+  } catch (error) {
+    console.error("Gagal mengambil laporan:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengambil laporan",
+    });
+  }
 });
 
 // Ambil detail laporan berdasarkan id database
-app.get("/api/reports/:id", (req, res) => {
-  const report = db
-    .prepare("SELECT * FROM reports WHERE id = ?")
-    .get(req.params.id);
+app.get("/api/reports/detail/:id", (req, res) => {
+  try {
+    const report = db
+      .prepare("SELECT * FROM reports WHERE id = ?")
+      .get(req.params.id);
 
-  if (!report) {
-    return res.status(404).json({ message: "Laporan tidak ditemukan" });
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: "Laporan tidak ditemukan",
+      });
+    }
+
+    res.json(report);
+  } catch (error) {
+    console.error("Gagal mengambil detail laporan:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengambil detail laporan",
+    });
   }
-
-  res.json(report);
 });
 
-// Tambah laporan baru dari simulasi LoRa / Gateway
+// Ambil log tambahan berdasarkan message_id
+app.get("/api/reports/:message_id/logs", (req, res) => {
+  const { message_id } = req.params;
+
+  try {
+    const logs = db
+      .prepare(`
+        SELECT *
+        FROM report_logs
+        WHERE message_id = ?
+        ORDER BY id ASC
+      `)
+      .all(message_id);
+
+    res.json(logs);
+  } catch (error) {
+    console.error("Gagal mengambil log laporan:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengambil log laporan",
+    });
+  }
+});
+
+// Tambah laporan baru dari ESP32 receiver / LoRa gateway
+// Logika:
+// - message_id baru => insert laporan baru
+// - message_id sama => update laporan lama
+// - status tidak diubah otomatis saat sinyal duplicate/update
+// - victim_count selalu diperbarui sesuai input terbaru dari captive portal
 app.post("/api/reports", (req, res) => {
   const {
     message_id,
     status,
     node_penerima,
     latitude,
-    longitude
+    longitude,
+    victim_count,
   } = req.body;
 
   if (
@@ -107,85 +234,218 @@ app.post("/api/reports", (req, res) => {
   ) {
     return res.status(400).json({
       success: false,
-      message: "Data laporan belum lengkap"
+      message: "Data laporan belum lengkap",
     });
   }
 
-  const now = new Date();
+  const { createdAt, waktu } = getCurrentTimestamp();
 
-  const createdAt = now.toISOString();
+  const latitudeNumber = Number(latitude);
+  const longitudeNumber = Number(longitude);
+  const victimCountNumber = Number(victim_count || 1);
 
-  const waktu = now.toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  });
+  if (Number.isNaN(latitudeNumber) || Number.isNaN(longitudeNumber)) {
+    return res.status(400).json({
+      success: false,
+      message: "Latitude dan longitude harus berupa angka",
+    });
+  }
 
-  const insert = db.prepare(`
-    INSERT INTO reports 
-    (message_id, waktu, status, node_penerima, latitude, longitude, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
+  if (Number.isNaN(victimCountNumber) || victimCountNumber < 1) {
+    return res.status(400).json({
+      success: false,
+      message: "Jumlah korban harus berupa angka minimal 1",
+    });
+  }
 
-  const result = insert.run(
-    message_id,
-    waktu,
-    status,
-    node_penerima,
-    latitude,
-    longitude,
-    createdAt
-  );
+  try {
+    const existingReport = db
+      .prepare("SELECT * FROM reports WHERE message_id = ? ORDER BY id DESC LIMIT 1")
+      .get(message_id);
 
-  const newReport = db
-    .prepare("SELECT * FROM reports WHERE id = ?")
-    .get(result.lastInsertRowid);
+    if (existingReport) {
+      db.prepare(`
+        UPDATE reports
+        SET 
+          node_penerima = ?,
+          latitude = ?,
+          longitude = ?,
+          victim_count = ?,
+          last_seen = ?,
+          duplicate_count = COALESCE(duplicate_count, 1) + 1
+        WHERE message_id = ?
+      `).run(
+        node_penerima,
+        latitudeNumber,
+        longitudeNumber,
+        victimCountNumber,
+        createdAt,
+        message_id
+      );
 
-  res.json({
-    success: true,
-    message: "Laporan SOS berhasil disimpan",
-    report: newReport
-  });
+      const updatedReport = db
+        .prepare("SELECT * FROM reports WHERE message_id = ? ORDER BY id DESC LIMIT 1")
+        .get(message_id);
+
+      return res.json({
+        success: true,
+        duplicate: true,
+        message: "Sinyal SOS sudah pernah diterima. Data laporan diperbarui tanpa membuat laporan baru.",
+        report: updatedReport,
+      });
+    }
+
+    const insert = db.prepare(`
+      INSERT INTO reports 
+      (
+        message_id,
+        waktu,
+        status,
+        node_penerima,
+        latitude,
+        longitude,
+        victim_count,
+        created_at,
+        last_seen,
+        duplicate_count
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = insert.run(
+      message_id,
+      waktu,
+      status,
+      node_penerima,
+      latitudeNumber,
+      longitudeNumber,
+      victimCountNumber,
+      createdAt,
+      createdAt,
+      1
+    );
+
+    const newReport = db
+      .prepare("SELECT * FROM reports WHERE id = ?")
+      .get(result.lastInsertRowid);
+
+    res.json({
+      success: true,
+      duplicate: false,
+      message: "Laporan SOS baru berhasil disimpan",
+      report: newReport,
+    });
+  } catch (error) {
+    console.error("Gagal menyimpan laporan:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal menyimpan laporan",
+    });
+  }
 });
 
-// Update status laporan berdasarkan message_id
+// Update status laporan berdasarkan message_id + simpan ke report_logs
 app.patch("/api/reports/:message_id/status", (req, res) => {
   const { status } = req.body;
   const { message_id } = req.params;
 
-  db.prepare("UPDATE reports SET status = ? WHERE message_id = ?")
-    .run(status, message_id);
-
-  const updatedReport = db
-    .prepare("SELECT * FROM reports WHERE message_id = ?")
-    .get(message_id);
-
-  if (!updatedReport) {
-    return res.status(404).json({ message: "Laporan tidak ditemukan" });
+  if (!status) {
+    return res.status(400).json({
+      success: false,
+      message: "Status wajib diisi",
+    });
   }
 
-  res.json(updatedReport);
+  try {
+    const existingReport = db
+      .prepare("SELECT * FROM reports WHERE message_id = ? ORDER BY id DESC LIMIT 1")
+      .get(message_id);
+
+    if (!existingReport) {
+      return res.status(404).json({
+        success: false,
+        message: "Laporan tidak ditemukan",
+      });
+    }
+
+    const result = db
+      .prepare("UPDATE reports SET status = ? WHERE message_id = ?")
+      .run(status, message_id);
+
+    const { createdAt, waktu } = getCurrentTimestamp();
+    const logMessage = getOperatorLogMessage(status);
+
+    db.prepare(`
+      INSERT INTO report_logs (
+        message_id,
+        waktu,
+        message,
+        source,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run(
+      message_id,
+      waktu,
+      logMessage,
+      "SAR Mission Control",
+      createdAt
+    );
+
+    const updatedReport = db
+      .prepare("SELECT * FROM reports WHERE message_id = ? ORDER BY id DESC LIMIT 1")
+      .get(message_id);
+
+    res.json({
+      success: true,
+      message: "Status laporan berhasil diperbarui",
+      changed: result.changes,
+      report: updatedReport,
+      log: {
+        message_id,
+        waktu,
+        message: logMessage,
+        source: "SAR Mission Control",
+        created_at: createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Gagal memperbarui status laporan:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal memperbarui status laporan",
+    });
+  }
 });
 
 // Hapus laporan berdasarkan message_id
 app.delete("/api/reports/:message_id", (req, res) => {
   const { message_id } = req.params;
 
-  const result = db
-    .prepare("DELETE FROM reports WHERE message_id = ?")
-    .run(message_id);
+  try {
+    const result = db
+      .prepare("DELETE FROM reports WHERE message_id = ?")
+      .run(message_id);
 
-  if (result.changes === 0) {
-    return res.status(404).json({
+    db.prepare("DELETE FROM report_logs WHERE message_id = ?").run(message_id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Laporan tidak ditemukan",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Laporan ${message_id} berhasil dihapus`,
+    });
+  } catch (error) {
+    console.error("Gagal menghapus laporan:", error);
+    res.status(500).json({
       success: false,
-      message: "Laporan tidak ditemukan"
+      message: "Gagal menghapus laporan",
     });
   }
-
-  res.json({
-    success: true,
-    message: `Laporan ${message_id} berhasil dihapus`
-  });
 });
 
 // =======================
@@ -214,22 +474,37 @@ if (userCount.total === 0) {
 app.post("/api/login", (req, res) => {
   const { username, password } = req.body;
 
-  const user = db
-    .prepare("SELECT id, username, name, role FROM users WHERE username = ? AND password = ?")
-    .get(username, password);
-
-  if (!user) {
-    return res.status(401).json({
+  if (!username || !password) {
+    return res.status(400).json({
       success: false,
-      message: "Username atau password salah"
+      message: "Username dan password wajib diisi",
     });
   }
 
-  res.json({
-    success: true,
-    message: "Login berhasil",
-    user
-  });
+  try {
+    const user = db
+      .prepare("SELECT id, username, name, role FROM users WHERE username = ? AND password = ?")
+      .get(username, password);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Username atau password salah",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Login berhasil",
+      user,
+    });
+  } catch (error) {
+    console.error("Gagal login:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal login",
+    });
+  }
 });
 
 // Register user baru
@@ -239,59 +514,105 @@ app.post("/api/register", (req, res) => {
   if (!username || !password || !name || !role) {
     return res.status(400).json({
       success: false,
-      message: "Semua field wajib diisi"
+      message: "Semua field wajib diisi",
     });
   }
 
-  const existingUser = db
-    .prepare("SELECT * FROM users WHERE username = ?")
-    .get(username);
+  try {
+    const existingUser = db
+      .prepare("SELECT * FROM users WHERE username = ?")
+      .get(username);
 
-  if (existingUser) {
-    return res.status(409).json({
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "Username sudah digunakan",
+      });
+    }
+
+    db.prepare(`
+      INSERT INTO users (username, password, name, role)
+      VALUES (?, ?, ?, ?)
+    `).run(username, password, name, role);
+
+    res.json({
+      success: true,
+      message: "Akun berhasil dibuat",
+    });
+  } catch (error) {
+    console.error("Gagal register:", error);
+    res.status(500).json({
       success: false,
-      message: "Username sudah digunakan"
+      message: "Gagal membuat akun",
     });
   }
-
-  db.prepare(`
-    INSERT INTO users (username, password, name, role)
-    VALUES (?, ?, ?, ?)
-  `).run(username, password, name, role);
-
-  res.json({
-    success: true,
-    message: "Akun berhasil dibuat"
-  });
 });
 
 // Ambil daftar user
 app.get("/api/users", (req, res) => {
-  const users = db
-    .prepare("SELECT id, username, name, role FROM users ORDER BY id DESC")
-    .all();
+  try {
+    const users = db
+      .prepare("SELECT id, username, name, role FROM users ORDER BY id DESC")
+      .all();
 
-  res.json(users);
+    res.json(users);
+  } catch (error) {
+    console.error("Gagal mengambil users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Gagal mengambil users",
+    });
+  }
 });
 
-// Halaman utama backend
+// =======================
+// HALAMAN INFORMASI API
+// =======================
 app.get("/api", (req, res) => {
   res.send(`
     <h1>LENTERA API Server</h1>
     <p>Server backend LENTERA sedang berjalan.</p>
+
+    <h3>Endpoint yang tersedia:</h3>
     <ul>
-      <li><a href="/api/reports">/api/reports</a></li>
-      <li><a href="/api/users">/api/users</a></li>
+      <li><a href="/api/reports">/api/reports</a> - Melihat data laporan SOS</li>
+      <li><a href="/api/users">/api/users</a> - Melihat data akun admin/operator</li>
+      <li>/api/login - Login user (POST)</li>
+      <li>/api/register - Membuat akun baru (POST)</li>
+      <li>/api/reports - Menambah laporan SOS baru dari ESP32 receiver (POST)</li>
+      <li>/api/reports/:message_id/logs - Melihat log aktivitas laporan</li>
+      <li>/api/reports/:message_id/status - Update status laporan (PATCH)</li>
+      <li>/api/reports/:message_id - Menghapus laporan SOS (DELETE)</li>
     </ul>
   `);
 });
 
-app.use(express.static(path.join(__dirname, "dist")));
+// =======================
+// SERVE FRONTEND DIST
+// =======================
+const distPath = path.join(__dirname, "dist");
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
 
-app.listen(port, () => {
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+} else {
+  app.get("/", (req, res) => {
+    res.send(`
+      <h1>LENTERA API Server</h1>
+      <p>Backend berjalan di: <b>http://localhost:${port}</b></p>
+      <p>Frontend development berjalan di: <b>http://localhost:3000</b></p>
+      <p>API reports: <a href="/api/reports">/api/reports</a></p>
+      <p>Catatan: folder <b>dist</b> belum ada. Jalankan <code>npm run build</code> jika ingin membuka dashboard dari port backend.</p>
+    `);
+  });
+}
+
+// =======================
+// START SERVER
+// =======================
+app.listen(port, "0.0.0.0", () => {
   console.log(`LENTERA database server running at http://localhost:${port}`);
 });

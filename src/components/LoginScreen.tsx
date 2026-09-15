@@ -105,8 +105,8 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       setRole('Operator Posko');
     } else {
       setMode('LOGIN');
-      setUsername('admin');
-      setPassword('admin123');
+      setUsername('stevie');
+      setPassword('stevie123');
       setName('');
       setRole('Operator Posko');
     }
@@ -134,10 +134,6 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           transition={{ duration: 0.6 }}
           className="flex flex-col items-center mb-6 text-center"
         >
-          <div className="w-12 h-12 rounded bg-[#014f86] border border-[#00d0ff] flex items-center justify-center mb-3 shadow-[0_0_15px_rgba(0,168,255,0.4)]">
-            <span className="text-2xl font-bold font-mono text-white select-none">*</span>
-          </div>
-
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-wider text-white">
             LENTERA Dashboard
           </h1>
@@ -176,7 +172,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Contoh: Admin Posko 1"
+                    placeholder=" "
                     className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[#c4c6d1] rounded focus:outline-none focus:ring-2 focus:ring-[#002d62]/30 focus:border-[#002d62] text-sm"
                     required={mode === 'REGISTER'}
                   />
