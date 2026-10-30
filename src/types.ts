@@ -1,4 +1,14 @@
-export type ReportStatus = 'BARU' | 'PROSES' | 'SELESAI';
+export type ReportStatus =
+  | 'BARU'
+  | 'PROSES'
+  | 'SELESAI';
+
+export type LocationSource =
+  | 'PHONE_GPS'
+  | 'NODE_GNSS'
+  | 'UNAVAILABLE'
+  | 'LEGACY'
+  | 'UNKNOWN';
 
 export interface SystemLog {
   id: string;
@@ -10,46 +20,60 @@ export interface SystemLog {
 export interface Report {
   id: number;
 
-  // Dari backend: message_id
-  messageId?: string;
+  // Backend: message_id
+  messageId: string;
 
-  // Dari backend: waktu
+  // Waktu laporan pertama
   time: string;
 
   status: ReportStatus;
 
-  // Dari backend: node_penerima
+  // Node yang ditampilkan
   node: string;
 
-  latitude: number;
-  longitude: number;
+  // Node transmitter asli
+  nodePengirim?: string;
 
-  // Dari backend: victim_count
-  victimCount?: number;
+  // Lokasi boleh tidak tersedia
+  latitude: number | null;
+  longitude: number | null;
+
+  // Jumlah korban terbaru
+  victimCount: number;
+
+  // Akurasi lokasi dalam meter
+  locationAccuracy?: number | null;
+
+  // Sumber lokasi
+  locationSource?: LocationSource | string;
 
   logs: SystemLog[];
 
   victimName?: string;
   notes?: string;
 
-  // Dari backend: created_at
+  // Waktu pertama laporan dibuat
   createdAt?: string;
 
-  // Dari backend: last_seen
+  // Waktu terakhir laporan diterima/update
   lastSeen?: string;
 
-  // Dari backend: duplicate_count
+  // Berapa kali backend menerima update ID ini
   duplicateCount?: number;
 }
 
 export interface SystemStatus {
-  gatewayLoRa: 'TERHUBUNG' | 'TERPUTUS';
-  loRaReceiver: 'AKTIF' | 'NONAKTIF';
+  gatewayLoRa:
+    | 'TERHUBUNG'
+    | 'TERPUTUS';
+
+  loRaReceiver:
+    | 'AKTIF'
+    | 'NONAKTIF';
+
   modeJaringan: string;
   serverLokal: string;
   sinkronisasiTerakhir: string;
 }
 
-// Tidak ada dummy data.
-// Laporan hanya muncul dari data asli backend / ESP32 receiver.
 export const INITIAL_REPORTS: Report[] = [];
