@@ -1,0 +1,8 @@
+[lentera]
+database = "data/lentera.db"
+legacy_database = "../shared/database/lentera-legacy.db"
+mbtiles = "../shared/map-data/java-shortbread-1.0.mbtiles"
+host = "127.0.0.1"
+port = 4000
+osrm_url = "http://127.0.0.1:5000"
+node_id = "POSKO-01"

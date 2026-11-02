@@ -1,0 +1,16 @@
+[Unit]
+Description=LENTERA Python backend (%i)
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/lentera/python-app
+Environment=LENTERA_CONFIG=/opt/lentera/python-app/lentera.toml
+ExecStart=/opt/lentera/python-app/.venv/bin/python -m lentera backend
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

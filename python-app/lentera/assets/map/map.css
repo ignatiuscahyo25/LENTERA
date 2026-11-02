@@ -1,0 +1,6 @@
+@font-face{font-family:Inter;src:url('fonts/Inter.ttf')}
+html,body,#map{margin:0;width:100%;height:100%;font-family:Inter,sans-serif;background:#f3f1eb}
+#notice{position:absolute;bottom:34px;left:12px;right:44px;padding:10px 12px;background:#fffef0ee;border:1px solid #dfc98a;border-radius:6px;color:#541d02;font-size:12px;pointer-events:none}
+.pin{border:3px solid white;background:#ba0627;border-radius:50%;width:19px;height:19px;box-shadow:0 2px 8px #00193c66;cursor:pointer}
+.pin.PROSES{background:#e58a19}.pin.SELESAI{background:#2d6a4f}.pin.start{background:#236dc0}
+.maplibregl-popup-content{font:12px sans-serif;padding:12px;color:#00193c}

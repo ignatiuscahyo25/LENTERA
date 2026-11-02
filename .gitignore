@@ -6,3 +6,22 @@ coverage/
 *.log
 .env*
 !.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+data/
+artifacts/
+*.egg-info/
+
+# Local operator data and downloaded map packages (keep files on disk).
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.mbtiles
+*.mbtiles.part
+*.osm.pbf
+*.lock
+!web-app/package-lock.json

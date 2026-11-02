@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lentera-posko"
+version = "1.0.0"
+description = "LENTERA offline SAR desktop and Raspberry Pi LoRa gateway"
+requires-python = ">=3.11"
+dependencies = ["Flask>=3.1,<4", "waitress>=3,<4"]
+
+[project.optional-dependencies]
+desktop = ["PySide6>=6.8,<7"]
+test = ["pytest>=8,<10"]
+pi = ["spidev>=3.6,<4", "RPi.GPIO>=0.7.1; platform_machine == 'aarch64'"]
+
+[project.scripts]
+lentera = "lentera.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["lentera*"]
+
+[tool.setuptools.package-data]
+lentera = ["assets/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=LENTERA SAR
+Comment=Offline SAR mission control
+Exec=/opt/lentera/python-app/.venv/bin/python -m lentera --config /opt/lentera/python-app/lentera.toml desktop
+Path=/opt/lentera/python-app
+Icon=/opt/lentera/python-app/lentera/assets/icon.svg
+Terminal=false
+Categories=Utility;
